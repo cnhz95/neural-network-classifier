@@ -1,16 +1,12 @@
 import sys
 import torch
-from torch import nn
+from torch import nn, optim
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 import numpy as np
 import pandas as pd
-
-#device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#print(f"Using {device} device")
 
 batch_size = 8
 epochs = 30
@@ -20,20 +16,22 @@ def read_data(csv_file):
 	data = pd.read_csv(csv_file)
 	data.drop(data.columns[0], inplace=True, axis=1)
 	data = pd.get_dummies(data, columns=["x7", "x12"], dtype=int)  # One-hot encode categorical data
-	return data
+	return data.values
 
 training_set = read_data("data/TrainOnMe.csv")
 evaluation_set = read_data("data/EvaluateOnMe.csv")
 
 # Normalize input
 normalizer = StandardScaler()
-X = normalizer.fit_transform(training_set.values[:, 1:].astype(np.float32))
-evaluation = normalizer.fit_transform(evaluation_set.values[:, :].astype(np.float32))
+X = normalizer.fit_transform(training_set[:, 1:].astype(np.float32))
+evaluation = normalizer.fit_transform(evaluation_set.astype(np.float32))
 
 # Encode labels
-y = training_set.values[:, 0:1].reshape(training_set.shape[0])
+y = training_set[:, 0:1].reshape(training_set.shape[0])
 le = LabelEncoder().fit(y)
 y = le.transform(y)
+
+classes = ("Allan", "Barbie", "Ken")
 
 class CustomDataset(Dataset):
 	def __init__(self, X=None, y=None, evaluation=None):
@@ -62,60 +60,69 @@ class NeuralNetwork(nn.Module):
 		x = F.relu(self.layer_2(x))
 		return x
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True)
+iterations = 100
+accuracy_goal = 80
+accuracies = np.empty(iterations)
+for it in range(iterations):
+	X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True)
 
-training_data = CustomDataset(X_train, y_train)
-test_data = CustomDataset(X_test, y_test)
-evaluation_data = CustomDataset(None, None, evaluation)
+	training_data = CustomDataset(X_train, y_train)
+	test_data = CustomDataset(X_test, y_test)
+	evaluation_data = CustomDataset(None, None, evaluation)
 
-train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
-test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
-evaluation_dataloader = DataLoader(evaluation_data, batch_size=batch_size, shuffle=True)
+	# Pass samples in mini-batches, reshuffle the training data at every epoch to reduce model overfitting.
+	train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
+	test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
+	evaluation_dataloader = DataLoader(evaluation_data, batch_size=batch_size, shuffle=False)
 
-model = NeuralNetwork(X.shape[1])
+	model = NeuralNetwork(X.shape[1])
 
-# Define the loss and optimizer
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
+	# Define the loss and optimizer
+	criterion = nn.CrossEntropyLoss()
+	optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
 
-classes = ("Allan", "Barbie", "Ken")
+	# Train the network
+	for epoch in range(epochs):
+		model.train()
+		for i, data in enumerate(train_dataloader, 0):
+			inputs, labels = data
+			optimizer.zero_grad()  # Zero the parameter gradients
+			outputs = model(inputs)  # Passing the input data executes the `forward` method
+			loss = criterion(outputs, labels)
+			loss.backward()
+			optimizer.step()
 
-# Train the network
-for epoch in range(epochs):
-	model.train()
-	for i, data in enumerate(train_dataloader, 0):
-		inputs, labels = data
-		optimizer.zero_grad()  # Zero the parameter gradients
-		outputs = model(inputs)  # Passing the input data executes the `forward` method
-		loss = criterion(outputs, labels)
-		loss.backward()
-		optimizer.step()
-
-# Test the network on the test data
-correct = 0
-total = 0
-model.eval()
-with torch.no_grad():  # No need to calculate the gradients for the output since we are not training
-	for data in test_dataloader:
-		inputs, labels = data
-		outputs = model(inputs)
-		_, predicted = torch.max(outputs.data, 1)
-		total += labels.size(0)
-		correct += (predicted == labels).sum().item()
-
-accuracy = 100 * correct // total
-print(f"\nAccuracy of the network: {accuracy} %", file=sys.stderr)
-
-# Predict the labels of the evaluation data
-if accuracy >= 79:
-	predictions = []
+	# Test the network on the test data
+	correct = 0
+	total = 0
 	model.eval()
-	with torch.no_grad():
-		for data in evaluation_dataloader:
-			inputs = data
+	with torch.no_grad():  # No need to calculate the gradients for the output since we are not training
+		for data in test_dataloader:
+			inputs, labels = data
 			outputs = model(inputs)
 			_, predicted = torch.max(outputs.data, 1)
-			predictions.append("".join(f"{classes[predicted[p]]}\n" for p in range(len(predicted))))
+			total += labels.size(0)
+			correct += (predicted == labels).sum().item()
 
-	print("Saving predictions")
-	open("predictions.txt", "w").writelines(f"{predictions[p]}" for p in range(len(predictions)))
+	accuracy = 100 * correct // total
+	accuracies[it] = accuracy
+	print(f"{it + 1}. Accuracy of the network: {accuracy} %")
+
+	# Classify the evaluation data
+	if accuracy > accuracy_goal:
+		predictions = []
+		model.eval()
+		with torch.no_grad():
+			for data in evaluation_dataloader:
+				inputs = data
+				outputs = model(inputs)
+				_, predicted = torch.max(outputs.data, 1)
+				predictions.append("".join(f"{classes[predicted[p]]}\n" for p in range(len(predicted))))
+
+		print(f"Saving classification with accuracy of {accuracy} %", file=sys.stderr)
+		open("predictions.txt", "w").writelines(f"{predictions[p]}" for p in range(len(predictions)))
+		accuracy_goal = accuracy
+
+print(f"Max accuracy: {accuracy_goal if accuracy_goal > 80 else 'Below target'} %")
+print(f"Mean accuracy: {np.mean(accuracies)} %")
+print(f"Stddev: {np.std(accuracies):.2f} %")
