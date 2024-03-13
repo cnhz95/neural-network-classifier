@@ -10,12 +10,12 @@ import pandas as pd
 
 batch_size = 8
 epochs = 30
-nodes = 50
+nodes = 30
 
 def read_data(csv_file):
 	data = pd.read_csv(csv_file)
-	data.drop(data.columns[0], inplace=True, axis=1)
-	data = pd.get_dummies(data, columns=["x7", "x12"], dtype=int)  # One-hot encode categorical data
+	data.drop(columns=["Unnamed: 0", "x12"], inplace=True)
+	data = pd.get_dummies(data, columns=["x7"], dtype=int)  # One-hot encode categorical data
 	return data.values
 
 training_set = read_data("data/TrainOnMe.csv")
@@ -60,10 +60,10 @@ class NeuralNetwork(nn.Module):
 		x = F.relu(self.layer_2(x))
 		return x
 
-iterations = 100
+iterations = 30
 accuracy_goal = 80
-accuracies = np.empty(iterations)
-for it in range(iterations):
+accuracies = np.empty((iterations, epochs))
+for k in range(iterations):
 	X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True)
 
 	training_data = CustomDataset(X_train, y_train)
@@ -92,36 +92,35 @@ for it in range(iterations):
 			loss.backward()
 			optimizer.step()
 
-	# Test the network on the test data
-	correct = 0
-	total = 0
-	model.eval()
-	with torch.no_grad():  # No need to calculate the gradients for the output since we are not training
-		for data in test_dataloader:
-			inputs, labels = data
-			outputs = model(inputs)
-			_, predicted = torch.max(outputs.data, 1)
-			total += labels.size(0)
-			correct += (predicted == labels).sum().item()
-
-	accuracy = 100 * correct // total
-	accuracies[it] = accuracy
-	print(f"{it + 1}. Accuracy of the network: {accuracy} %")
-
-	# Classify the evaluation data
-	if accuracy > accuracy_goal:
-		predictions = []
+		# Test the network on the test data
+		total = 0
+		correct = 0
 		model.eval()
-		with torch.no_grad():
-			for data in evaluation_dataloader:
-				inputs = data
+		with torch.no_grad():  # No need to calculate the gradients for the output since we are not training
+			for data in test_dataloader:
+				inputs, labels = data
 				outputs = model(inputs)
+				val_loss = criterion(outputs, labels)
 				_, predicted = torch.max(outputs.data, 1)
-				predictions.append("".join(f"{classes[predicted[p]]}\n" for p in range(len(predicted))))
+				total += labels.size(0)
+				correct += (predicted == labels).sum().item()
 
-		print(f"Saving classification with accuracy of {accuracy} %", file=sys.stderr)
-		open("predictions.txt", "w").writelines(f"{predictions[p]}" for p in range(len(predictions)))
-		accuracy_goal = accuracy
+		accuracy = 100 * correct / total
+		accuracies[k][epoch] = accuracy
+		print(f"{k + 1}. Accuracy of the network: {accuracy} %")
+
+		# Classify the evaluation data
+		if accuracy > accuracy_goal:
+			predictions = []
+			with torch.no_grad():
+				for data in evaluation_dataloader:
+					outputs = model(data)
+					_, predicted = torch.max(outputs.data, 1)
+					predictions.append("".join(f"{classes[predicted[p]]}\n" for p in range(len(predicted))))
+
+			print(f"Saving classification with accuracy rate of {accuracy} %", file=sys.stderr)
+			open("predictions.txt", "w").writelines(f"{predictions[p]}" for p in range(len(predictions)))
+			accuracy_goal = accuracy
 
 print(f"Max accuracy: {accuracy_goal if accuracy_goal > 80 else 'Below target'} %")
 print(f"Mean accuracy: {np.mean(accuracies)} %")
