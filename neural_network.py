@@ -12,7 +12,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using {device} device")
 
 batch_size = 8
-epochs = 50
+epochs = 30
 nodes = 30
 
 def read_data(csv_file):
