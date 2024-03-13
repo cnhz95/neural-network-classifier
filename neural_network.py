@@ -8,8 +8,11 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 import numpy as np
 import pandas as pd
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+print(f"Using {device} device")
+
 batch_size = 8
-epochs = 30
+epochs = 50
 nodes = 30
 
 def read_data(csv_file):
@@ -75,7 +78,7 @@ for k in range(iterations):
 	test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 	evaluation_dataloader = DataLoader(evaluation_data, batch_size=batch_size, shuffle=False)
 
-	model = NeuralNetwork(X.shape[1])
+	model = NeuralNetwork(X.shape[1]).to(device)
 
 	# Define the loss and optimizer
 	criterion = nn.CrossEntropyLoss()
@@ -85,7 +88,7 @@ for k in range(iterations):
 	for epoch in range(epochs):
 		model.train()
 		for i, data in enumerate(train_dataloader, 0):
-			inputs, labels = data
+			inputs, labels = data[0].to(device), data[1].to(device)
 			optimizer.zero_grad()  # Zero the parameter gradients
 			outputs = model(inputs)  # Passing the input data executes the `forward` method
 			loss = criterion(outputs, labels)
@@ -98,7 +101,7 @@ for k in range(iterations):
 		model.eval()
 		with torch.no_grad():  # No need to calculate the gradients for the output since we are not training
 			for data in test_dataloader:
-				inputs, labels = data
+				inputs, labels = data[0].to(device), data[1].to(device)
 				outputs = model(inputs)
 				val_loss = criterion(outputs, labels)
 				_, predicted = torch.max(outputs.data, 1)
@@ -114,7 +117,8 @@ for k in range(iterations):
 			predictions = []
 			with torch.no_grad():
 				for data in evaluation_dataloader:
-					outputs = model(data)
+					inputs = data.to(device)
+					outputs = model(inputs)
 					_, predicted = torch.max(outputs.data, 1)
 					predictions.append("".join(f"{classes[predicted[p]]}\n" for p in range(len(predicted))))
 
