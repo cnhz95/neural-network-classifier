@@ -1,1 +1,3 @@
-# neural-network-classifier
+# Neural Network Classifier
+
+Artificial neural network developed for the programming challenge in the course DD2421 Machine Learning. Achieves a maximum classification accuracy rate of 85 % on the test set.
