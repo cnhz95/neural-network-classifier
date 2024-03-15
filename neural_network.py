@@ -25,9 +25,9 @@ training_set = read_data("data/TrainOnMe.csv")
 evaluation_set = read_data("data/EvaluateOnMe.csv")
 
 # Normalize input
-normalizer = StandardScaler()
-X = normalizer.fit_transform(training_set[:, 1:].astype(np.float32))
-evaluation = normalizer.fit_transform(evaluation_set.astype(np.float32))
+scaler = StandardScaler()
+X = scaler.fit_transform(training_set[:, 1:].astype(np.float32))
+evaluation = scaler.fit_transform(evaluation_set.astype(np.float32))
 
 # Encode labels
 y = training_set[:, 0:1].reshape(training_set.shape[0])
@@ -120,10 +120,10 @@ for k in range(iterations):
 					inputs = data.to(device)
 					outputs = model(inputs)
 					_, predicted = torch.max(outputs.data, 1)
-					predictions.append("".join(f"{classes[predicted[p]]}\n" for p in range(len(predicted))))
+					predictions.append("".join(f"{classes[p]}\n" for p in predicted))
 
 			print(f"Saving classification with accuracy rate of {accuracy} %", file=sys.stderr)
-			open("predictions.txt", "w").writelines(f"{predictions[p]}" for p in range(len(predictions)))
+			open("predictions.txt", "w").writelines(p for p in predictions)
 			accuracy_goal = accuracy
 
 print(f"Max accuracy: {accuracy_goal if accuracy_goal > 80 else 'Below target'} %")
