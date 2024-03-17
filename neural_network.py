@@ -26,21 +26,21 @@ evaluation_set = read_data("data/EvaluateOnMe.csv")
 
 # Normalize input
 scaler = StandardScaler()
-X = scaler.fit_transform(training_set[:, 1:].astype(np.float32))
-evaluation = scaler.fit_transform(evaluation_set.astype(np.float32))
+X = torch.from_numpy(scaler.fit_transform(training_set[:, 1:].astype(np.float32)))
+evaluation = torch.from_numpy(scaler.fit_transform(evaluation_set.astype(np.float32)))
 
 # Encode labels
 y = training_set[:, 0:1].reshape(training_set.shape[0])
 le = LabelEncoder().fit(y)
-y = le.transform(y)
+y = torch.from_numpy(le.transform(y))
 
 classes = ("Allan", "Barbie", "Ken")
 
 class CustomDataset(Dataset):
-	def __init__(self, X=None, y=None, evaluation=None):
-		self.X = torch.from_numpy(X) if X is not None else None
-		self.y = torch.from_numpy(y) if y is not None else None
-		self.evaluation = torch.from_numpy(evaluation) if evaluation is not None else None
+	def __init__(self, X, y, evaluation):
+		self.X = X
+		self.y = y
+		self.evaluation = evaluation
 
 	def __len__(self):
 		return len(self.X) if self.X is not None else len(self.evaluation)
@@ -51,16 +51,16 @@ class CustomDataset(Dataset):
 class NeuralNetwork(nn.Module):
 	def __init__(self, n_features):
 		super().__init__()
-		self.dropout = nn.Dropout(0.2)
-		self.layer_1 = nn.Linear(in_features=n_features, out_features=nodes)
-		self.layer_2 = nn.Linear(in_features=nodes, out_features=nodes)
-		self.layer_3 = nn.Linear(in_features=nodes, out_features=3)
+		#self.dropout = nn.Dropout(0.2)
+		self.fc1 = nn.Linear(in_features=n_features, out_features=nodes)
+		self.fc2 = nn.Linear(in_features=nodes, out_features=nodes)
+		self.fc3 = nn.Linear(in_features=nodes, out_features=3)
 
 	def forward(self, x):
-		self.dropout(x)
-		x = F.relu(self.layer_1(x))
-		self.dropout(x)
-		x = F.relu(self.layer_2(x))
+		#x = self.dropout(x)
+		x = F.relu(self.fc1(x))
+		#x = self.dropout(x)
+		x = F.relu(self.fc2(x))
 		return x
 
 iterations = 30
@@ -69,8 +69,8 @@ accuracies = np.empty((iterations, epochs))
 for k in range(iterations):
 	X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True)
 
-	training_data = CustomDataset(X_train, y_train)
-	test_data = CustomDataset(X_test, y_test)
+	training_data = CustomDataset(X_train, y_train, None)
+	test_data = CustomDataset(X_test, y_test, None)
 	evaluation_data = CustomDataset(None, None, evaluation)
 
 	# Pass samples in mini-batches, reshuffle the training data at every epoch to reduce model overfitting.
@@ -117,8 +117,7 @@ for k in range(iterations):
 			predictions = []
 			with torch.no_grad():
 				for data in evaluation_dataloader:
-					inputs = data.to(device)
-					outputs = model(inputs)
+					outputs = model(data.to(device))
 					_, predicted = torch.max(outputs.data, 1)
 					predictions.append("".join(f"{classes[p]}\n" for p in predicted))
 
