@@ -124,6 +124,7 @@ for k in range(iterations):
 			print(f"Saving classification with accuracy rate of {accuracy} %", file=sys.stderr)
 			with open("predictions.txt", "w") as file:
 				file.writelines(p for p in predictions)
+			torch.onnx.export(model, X, "model.onnx", export_params=True)
 			accuracy_goal = accuracy
 
 print(f"Max accuracy: {accuracy_goal if accuracy_goal > 80 else 'Below target'} %")
