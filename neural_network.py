@@ -123,7 +123,8 @@ for k in range(iterations):
 					predictions.append("".join(f"{classes[p]}\n" for p in predicted))
 
 			print(f"Saving classification with accuracy rate of {accuracy} %", file=sys.stderr)
-			open("predictions.txt", "w").writelines(p for p in predictions)
+			with open("predictions.txt", "w") as file:
+				file.writelines(p for p in predictions)
 			accuracy_goal = accuracy
 
 print(f"Max accuracy: {accuracy_goal if accuracy_goal > 80 else 'Below target'} %")
